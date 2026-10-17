@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "Fireplace",
+    "slug": "fireplace-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#16110e",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.rdmilley.fireplace",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.rdmilley.fireplace",
+      "adaptiveIcon": {
+        "backgroundColor": "#16110e",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "neverForLocation": true,
+          "bluetoothAlwaysPermission": "Fireplace uses Bluetooth to control your fireplace."
+        }
+      ]
+    ]
+  }
+}
