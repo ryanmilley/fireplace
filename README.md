@@ -6,21 +6,30 @@ A phone remote for Source Pro Bluetooth electric fireplaces (the ones that use t
 Controls: power, heat (setpoint or OFF/HIGH), flame level, flame pattern, log/ember level,
 °F/°C, and a shut-off timer. The **Log** tab shows the raw Bluetooth traffic in both directions.
 
-## Run it on your phone
+## iPhone (no Mac needed)
 
-Bluetooth needs native code, so this won't run in Expo Go. Build a development client once:
+GitHub Actions builds the app on a Mac in the cloud (`.github/workflows/ios.yml`). The result is an
+**unsigned** `Fireplace.ipa`; you sign it with your own Apple ID when you install it.
+
+1. **Build:** push to `main` (or run *Build iOS app* from the repo's **Actions** tab). When it finishes
+   (~15–25 min), open the run and download the **Fireplace-ipa** artifact; unzip it to get `Fireplace.ipa`.
+   Pushing a tag such as `v1.0.0` also attaches the `.ipa` to a GitHub Release.
+2. **Install on Windows with [Sideloadly](https://sideloadly.io):** install iTunes and iCloud from apple.com
+   (not the Microsoft Store versions), plug in the iPhone, drag `Fireplace.ipa` into Sideloadly, enter your
+   Apple ID, and click Start.
+3. **On the iPhone:** Settings → Privacy & Security → **Developer Mode** → on (the phone restarts), then
+   Settings → General → VPN & Device Management → trust your Apple ID.
+
+With a free Apple ID the app stops opening after **7 days**. Re-run Sideloadly to refresh it (your settings
+are kept), or turn on Sideloadly's auto-refresh. A paid Apple Developer account ($99/yr) makes it last a year.
+
+## Android
 
 ```sh
 npm install
-npm install -g eas-cli && eas login     # free Expo account
-eas build --profile development --platform android   # gives you an .apk to install
-eas build --profile development --platform ios       # needs an Apple Developer account
-npx expo start --dev-client             # then open the app on the phone
+npm install -g eas-cli && eas login
+eas build --profile preview --platform android   # gives you an .apk to install
 ```
-
-Or build locally with Android Studio / Xcode: `npx expo run:android` / `npx expo run:ios`.
-
-For a standalone app that doesn't need the dev server, use `--profile preview`.
 
 ## Protocol
 

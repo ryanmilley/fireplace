@@ -1,0 +1,60 @@
+name: Build iOS app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+jobs:
+  ipa:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write   # to attach the .ipa to a GitHub Release when you push a v* tag
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Generates ios/ from app.json and installs CocoaPods.
+      - run: npx expo prebuild --platform ios --clean
+
+      # Unsigned Release build with the JS bundle embedded; Sideloadly/AltStore sign it on install.
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace ios/Fireplace.xcworkspace \
+            -scheme Fireplace \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build | xcbeautify
+
+      - name: Package .ipa
+        run: |
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/Fireplace.app Payload/
+          zip -qry Fireplace.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fireplace-ipa
+          path: Fireplace.ipa
+
+      - if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Fireplace.ipa
