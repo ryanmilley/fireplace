@@ -29,7 +29,6 @@ import {
   LEVEL_MAX,
   LEVEL_MIN,
   ProtocolVersion,
-  temperatureLabel,
   TempUnit,
   V1_TEMP_RANGE,
   V2_TEMP_STEPS,
@@ -267,15 +266,6 @@ function ControlScreen(props: {
   const flame = state.flameLevel ?? LEVEL_MIN;
   const logs = state.logLevel ?? LEVEL_MIN;
 
-  const tempMin = v === 1 ? V1_TEMP_RANGE[unit][0] : 0;
-  const tempMax = v === 1 ? V1_TEMP_RANGE[unit][1] : V2_TEMP_STEPS[unit].length - 1;
-  const temp = state.temperature ?? tempMin;
-  const setTemp = (t: number) => {
-    const next = Math.min(tempMax, Math.max(tempMin, t));
-    const value = v === 1 ? next : V2_TEMP_STEPS[unit][next];
-    send(commands.temperature(v, value), { temperature: next });
-  };
-
   const timerMins = state.timerRunning !== false && state.timerSeconds ? Math.ceil(state.timerSeconds / 60) : 0;
 
   return (
@@ -295,11 +285,11 @@ function ControlScreen(props: {
         <Text style={styles.powerLabel}>{state.power === undefined ? 'Power' : on ? 'On' : 'Off'}</Text>
       </Pressable>
 
-      <Stepper
-        label="Heat"
-        value={temperatureLabel({ temperature: temp }, v, unit)}
-        onMinus={() => setTemp(temp - 1)}
-        onPlus={() => setTemp(temp + 1)}
+      <HeatControl
+        version={v}
+        unit={unit}
+        temperature={state.temperature}
+        onSet={(t) => send(commands.temperature(v, v === 1 ? t : V2_TEMP_STEPS[unit][t]), { temperature: t })}
       />
       <Levels
         label="Flame level"
@@ -405,19 +395,78 @@ function Chip({ label, onPress }: { label: string; onPress: () => void }) {
   );
 }
 
-function Stepper(props: { label: string; value: string; onMinus: () => void; onPlus: () => void }) {
+type HeatMode = 'off' | 'on' | 'high';
+
+/**
+ * The fireplace has one heat value: its lowest setting is "off", its highest is "full heat",
+ * and everything in between is a thermostat target. This splits that into a mode switch
+ * plus a target, and waits until you stop tapping before sending.
+ */
+function HeatControl(props: {
+  version: ProtocolVersion;
+  unit: TempUnit;
+  /** v1: setpoint; v2: step index */
+  temperature?: number;
+  onSet: (t: number) => void;
+}) {
+  const { version: v, unit } = props;
+  const [min, max] = v === 1 ? V1_TEMP_RANGE[unit] : [0, V2_TEMP_STEPS[unit].length - 1];
+  const defaultTarget = v === 1 ? (unit === 'F' ? 72 : 22) : 3;
+  const [pending, setPending] = useState<number | undefined>();
+  const lastTarget = useRef(defaultTarget);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const shown = pending ?? props.temperature ?? min;
+  const mode: HeatMode = shown <= min ? 'off' : shown >= max ? 'high' : 'on';
+
+  useEffect(() => {
+    lastTarget.current = defaultTarget;
+  }, [v, unit]);
+  useEffect(() => {
+    if (mode === 'on') lastTarget.current = shown;
+  }, [mode, shown]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const set = (t: number, delayMs: number) => {
+    setPending(t);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      props.onSet(t);
+      setPending(undefined);
+    }, delayMs);
+  };
+  const pickMode = (m: HeatMode) => set(m === 'off' ? min : m === 'high' ? max : lastTarget.current, 0);
+  const nudge = (d: number) => set(Math.min(max - 1, Math.max(min + 1, shown + d)), 700);
+
+  const degrees = v === 1 ? shown : V2_TEMP_STEPS[unit][shown];
+  const caption =
+    mode === 'off' ? 'Heater off. Flames only.' : mode === 'high' ? 'Heater running at full power.' : 'Heats the room to this temperature.';
+
   return (
-    <View style={[styles.section, styles.rowBetween]}>
-      <Text style={styles.sectionLabel}>{props.label}</Text>
-      <View style={styles.row}>
-        <Pressable style={styles.round} onPress={props.onMinus}>
-          <Text style={styles.roundText}>−</Text>
-        </Pressable>
-        <Text style={styles.stepValue}>{props.value}</Text>
-        <Pressable style={styles.round} onPress={props.onPlus}>
-          <Text style={styles.roundText}>+</Text>
-        </Pressable>
+    <View style={styles.section}>
+      <View style={styles.rowBetween}>
+        <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>Heat</Text>
+        <Segmented
+          options={['off', 'on', 'high']}
+          labels={{ off: 'Off', on: 'On', high: 'High' }}
+          value={mode}
+          onChange={(m) => pickMode(m as HeatMode)}
+        />
       </View>
+      {mode === 'on' && (
+        <View style={[styles.row, { justifyContent: 'center', marginTop: 14 }]}>
+          <Pressable style={styles.round} onPress={() => nudge(-1)} disabled={shown <= min + 1}>
+            <Text style={[styles.roundText, shown <= min + 1 && { opacity: 0.3 }]}>−</Text>
+          </Pressable>
+          <Text style={styles.heatValue}>
+            {degrees}°{unit}
+          </Text>
+          <Pressable style={styles.round} onPress={() => nudge(1)} disabled={shown >= max - 1}>
+            <Text style={[styles.roundText, shown >= max - 1 && { opacity: 0.3 }]}>+</Text>
+          </Pressable>
+        </View>
+      )}
+      <Text style={[styles.dim, { marginTop: 10, textAlign: mode === 'on' ? 'center' : 'left' }]}>{caption}</Text>
     </View>
   );
 }
@@ -442,12 +491,22 @@ function Levels(props: { label: string; min: number; max: number; value: number;
   );
 }
 
-function Segmented({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) {
+function Segmented({
+  options,
+  labels,
+  value,
+  onChange,
+}: {
+  options: string[];
+  labels?: Record<string, string>;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <View style={styles.segmented}>
       {options.map((o) => (
         <Pressable key={o} onPress={() => onChange(o)} style={[styles.segment, o === value && { backgroundColor: C.accent }]}>
-          <Text style={[styles.text, o === value && { fontWeight: '700' }]}>{o === 'F' || o === 'C' ? `°${o}` : `v${o}`}</Text>
+          <Text style={[styles.text, o === value && { fontWeight: '700' }]}>{labels?.[o] ?? (o === 'F' || o === 'C' ? `°${o}` : `v${o}`)}</Text>
         </Pressable>
       ))}
     </View>
@@ -479,7 +538,7 @@ const styles = StyleSheet.create({
   sectionLabel: { color: C.dim, fontSize: 13, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
   round: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.border, alignItems: 'center', justifyContent: 'center' },
   roundText: { color: C.text, fontSize: 24, fontWeight: '600' },
-  stepValue: { color: C.text, fontSize: 20, fontWeight: '700', minWidth: 90, textAlign: 'center' },
+  heatValue: { color: C.text, fontSize: 40, fontWeight: '700', minWidth: 140, textAlign: 'center' },
   levels: { flexDirection: 'row', gap: 6 },
   level: { flex: 1, height: 44, borderRadius: 10, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.border },
   levelActive: { borderColor: C.accent, backgroundColor: C.accent },
