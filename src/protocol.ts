@@ -59,6 +59,8 @@ export interface FireplaceState {
   unit?: TempUnit;
   timerSeconds?: number;
   timerRunning?: boolean;
+  /** room temperature measured by the fireplace, in its current unit */
+  roomTemp?: number;
 }
 
 function num(x: unknown): number | undefined {
@@ -95,6 +97,8 @@ export function applyStatus(prev: FireplaceState, msg: Record<string, unknown>):
       s.temperature = tt;
     }
   }
+  const tp = num(msg.tp);
+  if (tp !== undefined) s.roomTemp = tp;
   const ts = num(msg.ts);
   if (ts !== undefined) s.timerSeconds = ts;
   const tr = num(msg.tr);

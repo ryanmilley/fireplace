@@ -289,6 +289,7 @@ function ControlScreen(props: {
         version={v}
         unit={unit}
         temperature={state.temperature}
+        roomTemp={state.roomTemp}
         onSet={(t) => send(commands.temperature(v, v === 1 ? t : V2_TEMP_STEPS[unit][t]), { temperature: t })}
       />
       <Levels
@@ -407,6 +408,7 @@ function HeatControl(props: {
   unit: TempUnit;
   /** v1: setpoint; v2: step index */
   temperature?: number;
+  roomTemp?: number;
   onSet: (t: number) => void;
 }) {
   const { version: v, unit } = props;
@@ -439,13 +441,27 @@ function HeatControl(props: {
   const nudge = (d: number) => set(Math.min(max - 1, Math.max(min + 1, shown + d)), 700);
 
   const degrees = v === 1 ? shown : V2_TEMP_STEPS[unit][shown];
+  const room = props.roomTemp;
   const caption =
-    mode === 'off' ? 'Heater off. Flames only.' : mode === 'high' ? 'Heater running at full power.' : 'Heats the room to this temperature.';
+    mode === 'off'
+      ? 'Heater off. Flames only.'
+      : mode === 'high'
+        ? 'Heater at full power.'
+        : room !== undefined && degrees <= room
+          ? `The room is already ${room}°${unit}, so the heater waits until it drops below ${degrees}°${unit}.`
+          : 'Heats the room to this temperature.';
 
   return (
     <View style={styles.section}>
       <View style={styles.rowBetween}>
-        <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>Heat</Text>
+        <View>
+          <Text style={[styles.sectionLabel, { marginBottom: 2 }]}>Heat</Text>
+          {room !== undefined && (
+            <Text style={styles.dim}>
+              Room {room}°{unit}
+            </Text>
+          )}
+        </View>
         <Segmented
           options={['off', 'on', 'high']}
           labels={{ off: 'Off', on: 'On', high: 'High' }}
