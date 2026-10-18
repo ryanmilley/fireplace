@@ -446,10 +446,10 @@ function HeatControl(props: {
     mode === 'off'
       ? 'Heater off. Flames only.'
       : mode === 'high'
-        ? 'Heater at full power.'
+        ? 'Heater at full power. It can take a minute or two to start.'
         : room !== undefined && degrees <= room
           ? `The room is already ${room}°${unit}, so the heater waits until it drops below ${degrees}°${unit}.`
-          : 'Heats the room to this temperature.';
+          : 'Heats the room to this temperature. It can take a minute or two to start.';
 
   return (
     <View style={styles.section}>
